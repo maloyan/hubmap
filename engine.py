@@ -31,25 +31,18 @@ def run_train(
     model.train()
 
     progress_bar = tqdm(train_dataloader, total=len(train_dataloader))
-    # tr_it = iter(train_dataloader)
-    dataset_size = 0
-    running_loss = 0.0
-    for batch in progress_bar:
-        inputs, masks, labels = (batch["img"], batch["mask"], batch["labels"])
 
-        outputs = model(inputs)
-        loss = seg_loss_func(masks, outputs[0][:, 0, :, :])
-        accelerate.backward(loss)
-        optimizer.step()
-
+    for images, masks in progress_bar:
         optimizer.zero_grad()
+        prediction = model.forward(images)
+        loss = seg_loss_func(prediction[0], masks)
+        accelerate.backward(loss)
+
+        #loss.backward()
+        optimizer.step()
         scheduler.step()
 
-        running_loss += loss.item() * config["batch_size"]
-        dataset_size += config["batch_size"]
-        losses = running_loss / dataset_size
         progress_bar.set_description(
-            f"loss: {losses:.4f} lr: {optimizer.param_groups[0]['lr']:.6f}"
+            f"loss: {loss.item():.4f} lr: {optimizer.param_groups[0]['lr']:.6f}"
         )
-        # del batch, inputs, masks, outputs, loss
-    print(f"Train loss: {losses:.4f}")
+    return loss.item()

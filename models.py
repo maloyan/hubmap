@@ -265,13 +265,8 @@ class UNET_RESNET34(nn.Module):
 
         # encoder
         model_name = "resnet34"  # 26M
-        resnet34 = pretrainedmodels.__dict__["resnet34"](
-            num_classes=1000, pretrained=None
-        )
-        if load_weights:
-            resnet34.load_state_dict(
-                torch.load(f"../../../pretrainedmodels_weight/{model_name}.pth")
-            )
+        resnet34 = timm.create_model(model_name, pretrained=True)
+
         self.conv1 = resnet34.conv1  # (*,3,h,w)->(*,64,h/2,w/2)
         self.bn1 = resnet34.bn1
         self.maxpool = resnet34.maxpool  # ->(*,64,h/4,w/4)
@@ -303,12 +298,12 @@ class UNET_RESNET34(nn.Module):
         self.upsample1 = nn.Upsample(
             scale_factor=2, mode="bilinear", align_corners=True
         )
-
-        # deep supervision
-        self.deep4 = conv1x1(64, 1).apply(init_weight)
-        self.deep3 = conv1x1(64, 1).apply(init_weight)
-        self.deep2 = conv1x1(64, 1).apply(init_weight)
-        self.deep1 = conv1x1(64, 1).apply(init_weight)
+        if self.deepsupervision:
+            # deep supervision
+            self.deep4 = conv1x1(64, 1).apply(init_weight)
+            self.deep3 = conv1x1(64, 1).apply(init_weight)
+            self.deep2 = conv1x1(64, 1).apply(init_weight)
+            self.deep1 = conv1x1(64, 1).apply(init_weight)
 
         # final conv
         self.final_conv = nn.Sequential(
@@ -316,16 +311,16 @@ class UNET_RESNET34(nn.Module):
             nn.ELU(True),
             conv1x1(64, 1).apply(init_weight),
         )
-
-        # clf head
-        self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.clf = nn.Sequential(
-            nn.BatchNorm1d(512).apply(init_weight),
-            nn.Linear(512, 512).apply(init_weight),
-            nn.ELU(True),
-            nn.BatchNorm1d(512).apply(init_weight),
-            nn.Linear(512, 1).apply(init_weight),
-        )
+        if self.clfhead:
+            # clf head
+            self.avgpool = nn.AdaptiveAvgPool2d(1)
+            self.clf = nn.Sequential(
+                nn.BatchNorm1d(512).apply(init_weight),
+                nn.Linear(512, 512).apply(init_weight),
+                nn.ELU(True),
+                nn.BatchNorm1d(512).apply(init_weight),
+                nn.Linear(512, 1).apply(init_weight),
+            )
 
     def forward(self, inputs):
         # encoder
@@ -336,22 +331,23 @@ class UNET_RESNET34(nn.Module):
         x3 = self.layer3(x2)  # ->(*,256,h/16,w/16)
         x4 = self.layer4(x3)  # ->(*,512,h/32,w/32)
 
-        # clf head
-        logits_clf = self.clf(self.avgpool(x4).squeeze(-1).squeeze(-1))  # ->(*,1)
-        if config["clf_threshold"] is not None:
-            if (torch.sigmoid(logits_clf) > config["clf_threshold"]).sum().item() == 0:
-                bs, _, h, w = inputs.shape
-                logits = torch.zeros((bs, 1, h, w))
-                if self.clfhead:
-                    if self.deepsupervision:
-                        return logits, _, _
+        if self.clfhead:
+            # clf head
+            logits_clf = self.clf(self.avgpool(x4).squeeze(-1).squeeze(-1))  # ->(*,1)
+            if config["clf_threshold"] is not None:
+                if (torch.sigmoid(logits_clf) > config["clf_threshold"]).sum().item() == 0:
+                    bs, _, h, w = inputs.shape
+                    logits = torch.zeros((bs, 1, h, w))
+                    if self.clfhead:
+                        if self.deepsupervision:
+                            return logits, _, _
+                        else:
+                            return logits, _
                     else:
-                        return logits, _
-                else:
-                    if self.deepsupervision:
-                        return logits, _
-                    else:
-                        return logits
+                        if self.deepsupervision:
+                            return logits, _
+                        else:
+                            return logits
 
         # center
         y5 = self.center(x4)  # ->(*,512,h/32,w/32)
@@ -373,30 +369,21 @@ class UNET_RESNET34(nn.Module):
         # final conv
         logits = self.final_conv(hypercol)  # ->(*,1,h,w)
 
-        # clf head
-        logits_clf = self.clf(self.avgpool(x4).squeeze(-1).squeeze(-1))  # ->(*,1)
+        res = [logits]
+        if self.deepsupervision:
+            s4 = self.deep4(y4)
+            s3 = self.deep3(y3)
+            s2 = self.deep2(y2)
+            s1 = self.deep1(y1)
+            logits_deeps = [s4, s3, s2, s1]
+            res.append(logits_deeps)
 
         if self.clfhead:
-            if self.deepsupervision:
-                s4 = self.deep4(y4)
-                s3 = self.deep3(y3)
-                s2 = self.deep2(y2)
-                s1 = self.deep1(y1)
-                logits_deeps = [s4, s3, s2, s1]
-                return logits, logits_deeps, logits_clf
-            else:
-                return logits, logits_clf
-        else:
-            if self.deepsupervision:
-                s4 = self.deep4(y4)
-                s3 = self.deep3(y3)
-                s2 = self.deep2(y2)
-                s1 = self.deep1(y1)
-                logits_deeps = [s4, s3, s2, s1]
-                return logits, logits_deeps
-            else:
-                return logits
+            # clf head
+            logits_clf = self.clf(self.avgpool(x4).squeeze(-1).squeeze(-1))  # ->(*,1)
+            res.append(logits_clf)
 
+        return res
 
 # U-Net SeResNext50 + CBAM + hypercolumns + deepsupervision
 class UNET_SERESNEXT50(nn.Module):
@@ -696,7 +683,7 @@ class UNET_SERESNEXT101(nn.Module):
 
 def build_model(resolution, deepsupervision, clfhead, load_weights):
     model_name = config["model_name"]
-    if model_name == "resnet34":
+    if model_name == "unet_resnet34":
         model = UNET_RESNET34(resolution, deepsupervision, clfhead, load_weights)
     elif model_name == "seresnext50":
         model = UNET_SERESNEXT50(resolution, deepsupervision, clfhead, load_weights)

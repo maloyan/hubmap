@@ -1,12 +1,7 @@
-import os
-import pickle
-from os.path import join as opj
 
-import cv2
 import numpy as np
 import rasterio
 import torch
-from rasterio.windows import Window
 from torch.utils.data import Dataset
 
 from config import config
@@ -85,8 +80,11 @@ class HuBMAPDataset(Dataset):
 
         res = self.transforms(image=np.moveaxis(data.read([1, 2, 3]), 0, -1), mask=mask)
 
-        return {
-            "img": torch.tensor(res["image"], dtype=torch.float),
-            "mask": torch.tensor(res["mask"], dtype=torch.float),
-            "labels": 0,
-        }
+        return torch.tensor(res["image"], dtype=torch.float), \
+               torch.tensor([res["mask"]], dtype=torch.float),
+
+        # return {
+        #     "img": torch.tensor(res["image"], dtype=torch.float),
+        #     "mask": torch.tensor([res["mask"]], dtype=torch.float),
+        #     "labels": 0,
+        # }
