@@ -10,7 +10,6 @@ from config import config
 from dataset import HuBMAPDataset
 from engine import run_train
 from models import build_model
-from utils import mask2rle
 
 accelerate = Accelerator()
 
@@ -63,17 +62,6 @@ scheduler = optim.lr_scheduler.CosineAnnealingLR(
     optimizer, **config["lr_scheduler"]["CosineAnnealingLR"]
 )
 
-# class SumTwoLosses(smp.utils.base.Loss):
-#     def __init__(self, l1, l2, a=0.5, b=0.5):
-#         super().__init__(name="SumTwoLosses")
-#         self.l1 = l1
-#         self.l2 = l2
-#         self.a = a
-#         self.b = b
-
-#     def __call__(self, *inputs):
-#         return self.a * self.l1.forward(*inputs) + self.b * self.l2.forward(*inputs)
-
 
 seg_loss_func = smp.utils.base.SumOfLosses(
     smp.utils.losses.DiceLoss(), smp.utils.losses.BCEWithLogitsLoss()
@@ -83,9 +71,7 @@ model, optimizer, train_dataloader = accelerate.prepare(
     model, optimizer, train_dataloader
 )
 
-metrics = [
-    smp.utils.metrics.IoU(threshold=0.5),
-]
+metrics = smp.utils.metrics.IoU(threshold=0.5)
 # train_epoch = smp.utils.train.TrainEpoch(
 #     model,
 #     loss=seg_loss_func,
@@ -98,7 +84,13 @@ metrics = [
 best_loss = 100
 for epoch in range(config["num_epochs"]):
     train_loss = run_train(
-        model, train_dataloader, optimizer, scheduler, seg_loss_func, accelerate
+        model,
+        train_dataloader,
+        optimizer,
+        scheduler,
+        seg_loss_func,
+        metrics,
+        accelerate,
     )
     if train_loss < best_loss:
         torch.save(model.state_dict(), "best_model.pt")

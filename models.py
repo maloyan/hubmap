@@ -1,10 +1,11 @@
 import pretrainedmodels
+import timm
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 from config import config
-import timm
+
 
 def conv3x3(in_channel, out_channel):  # not change resolusion
     return nn.Conv2d(
