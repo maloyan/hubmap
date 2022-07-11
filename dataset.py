@@ -25,18 +25,16 @@ def rle_decode(mask_rle, shape):
 
 
 class HuBMAPDataset(Dataset):
-    def __init__(
-        self, df, transforms, sz=config["input_resolution"], reduce=config["reduce"]
-    ):
+    def __init__(self, df, transforms, data_len=1000):
         self.df = df
         self.transforms = transforms
-        self.reduce = reduce
-        self.sz = reduce * sz
-
+        self.data_len = data_len
+        self.data_shape = df.shape[0]
     def __len__(self):
-        return self.df.shape[0]
+        return self.data_len #self.df.shape[0]
 
     def __getitem__(self, idx):
+        idx = idx % self.data_shape
         data = rasterio.open(
             f"{config['input_path']}/train_images/{self.df.iloc[idx]['id']}.tiff",
             transform=rasterio.Affine(1, 0, 0, 0, 1, 0),

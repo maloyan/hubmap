@@ -1,11 +1,12 @@
 config = {
+    "project": "HubMAP",
     "split_seed_list": [0],
     "FOLD_LIST": [0, 1, 2, 3],
     "model_path": "../input/hubmap-new-03-03/",
     "model_name": "unet_resnet34",
     "num_classes": 1,
     "resolution": (1024, 1024),  # (1024,1024),(512,512),
-    "input_resolution": 512,  # (320,320), #(256,256), #(512,512), #(384,384)
+    "input_resolution": 1024,  # (320,320), #(256,256), #(512,512), #(384,384)
     "deepsupervision": False,  # always false for inference
     "clfhead": False,
     "clf_threshold": 0.5,
@@ -13,13 +14,13 @@ config = {
     "mask_threshold": 0.5,
     "pad_size": 256,  # (64,64), #(256,256), #(128,128)
     "tta": 3,
-    "batch_size": 3,
+    "batch_size": 8,
     "FP16": False,
     "num_workers": 4,
     "device": "cuda",
     "input_path": "/kaggle/input/hubmap-organ-segmentation",
     "Adam": {
-        "lr": 1e-4,
+        "lr": 3e-5,
         #'betas':(0.9, 0.999),
         #'weight_decay':1e-5,
     },
@@ -36,5 +37,9 @@ config = {
         },
     },
     "reduce": 4,
-    "num_epochs": 30,
+    "num_epochs": 100,
+    "class_labels": {
+        0: "background",
+        1: "cell"
+    }
 }

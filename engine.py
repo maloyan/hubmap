@@ -10,16 +10,22 @@ def run_train(
 
     for images, masks in progress_bar:
         optimizer.zero_grad()
-        prediction = model.forward(images)
-        loss = seg_loss_func(prediction[0], masks)
+        prediction = model.forward(images)[0]
+        loss = seg_loss_func(prediction, masks)
         accelerate.backward(loss)
 
         # loss.backward()
         optimizer.step()
         scheduler.step()
 
-        iou_score = metrics(prediction[0], masks)
+        iou_score = metrics(prediction, masks)
         progress_bar.set_description(
             f"IoU: {iou_score:.4f} loss: {loss.item():.4f} lr: {optimizer.param_groups[0]['lr']:.6f}"
         )
-    return loss.item()
+    return {
+        "loss": loss.item(),
+        "iou": iou_score,
+        "images": images,
+        "masks": masks,
+        "predictions": prediction
+    }
